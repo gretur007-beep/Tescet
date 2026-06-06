@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Lumina Chat – Private & Ephemeral</title>
+
+  <!-- PWA Meta -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1f108e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Lumina" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+
+  <!-- Supabase SDK (InsForge backend) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <style>
+    /* ============================================================
+       CSS Variables & Reset
+    ============================================================ */
+    :root {
+      --bg:           #0d0f1a;
+      --bg-panel:     #131626;
+      --bg-card:      #1a1d30;
+      --bg-input:     #1f2235;
+      --border:       rgba(99, 102, 241, 0.18);
+      --border-hover: rgba(99, 102, 241, 0.40);
+
+      --primary:      #6366f1;        /* indigo */
+      --primary-dim:  rgba(99,102,241,0.15);
+      --primary-glow: rgba(99,102,241,0.35);
+      --accent:       #22d3ee;        /* cyan */
+      --accent-dim:   rgba(34,211,238,0.12);
+      --green:        #4ade80;
+      --green-dim:    rgba(74,222,128,0.15);
+      --red:          #f87171;
+
+      --text-1:       #f0f2ff;
+      --text-2:       #a0a8c8;
+      --text-3:       #5a6280;
+
+      --radius-sm:    8px;
+      --radius-md:    14px;
+      --radius-lg:    20px;
+      --radius-full:  9999px;
+
+      --chat-out-bg:  linear-gradient(135deg, #4f46e5, #6366f1);
+      --chat-in-bg:   #1e2140;
+
+      --shadow-glow:  0 0 24px rgba(99,102,241,0.25);
+      --shadow-card:  0 4px 24px rgba(0,0,0,0.45);
+
+      --sidebar-w:    300px;
+      --header-h:     64px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: 'Geist', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      user-select: none;
+      line-height: 1;
+    }
+
+    button { cursor: pointer; border: none; background: none; font-family: inherit; color: inherit; }
+    input, textarea { font-family: inherit; }
+    img { max-width: 100%; display: block; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ============================================================
+       SCREEN OVERLAYS — Login & Loading
+    ============================================================ */
+    #screen-loading,
+    #screen-login {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg);
+    }
+
+    /* Loading spinner */
+    #screen-loading {
+      flex-direction: column; gap: 16px;
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Login card */
+    #screen-login .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 40px 36px;
+      width: min(400px, 92vw);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      box-shadow: var(--shadow-glow), var(--shadow-card);
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .logo-mark {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: var(--primary-dim);
+      border: 1px solid var(--border-hover);
+      border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--primary);
+      font-size: 22px;
+    }
+    .logo-text h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    .logo-text p  { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
+    .form-group label { font-size: 13px; font-weight: 500; color: var(--text-2); }
+    .form-group input {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-size: 15px;
+      color: var(--text-1);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-dim);
+    }
+    .form-group input::placeholder { color: var(--text-3); }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      padding: 13px;
+      border-radius: var(--radius-sm);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      transition: opacity 0.15s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 16px rgba(99,102,241,0.35);
+    }
+    .btn-primary:hover  { opacity: 0.92; box-shadow: 0 6px 24px rgba(99,102,241,0.5); }
+    .btn-primary:active { transform: scale(0.98); }
+
+    .login-note {
+      font-size: 12px; color: var(--text-3); text-align: center; line-height: 1.5;
+    }
+    .login-note span { color: var(--accent); }
+
+    /* ============================================================
+       MAIN APP LAYOUT
+    ============================================================ */
+    #app {
+      display: none; /* ditampilkan setelah login */
+      height: 100vh;
+      flex-direction: row;
+    }
+    #app.active { display: flex; }
+
+    /* ── SIDEBAR ────────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width 0.3s ease, min-width 0.3s ease;
+    }
+
+    /* Sidebar header */
+    .sidebar-header {
+      height: var(--header-h);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sidebar-user {
+      display: flex; align-items: center; gap: 10px;
+      min-width: 0;
+    }
+    .user-avatar {
+      width: 36px; height: 36px;
+      border-radius: var(--radius-full);
+      background: var(--primary-dim);
+      border: 1.5px solid var(--primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: var(--primary);
+      flex-shrink: 0;
+    }
+    .user-info { min-width: 0; }
+    .user-name {
+      font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .user-id {
+      font-size: 11px; color: var(--text-3);
+      font-family: 'Geist Mono', monospace;
+    }
+    .btn-logout {
+      color: var(--text-3);
+      font-size: 20px;
+      padding: 6px;
+      border-radius: var(--radius-sm);
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-logout:hover { color: var(--red); background: rgba(248,113,113,0.1); }
+
+    /* Sidebar online list */
+    .sidebar-section {
+      padding: 14px 16px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--text-3);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .online-badge {
+      background: var(--green);
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.85); }
+    }
+    .online-count {
+      background: var(--green-dim);
+      color: var(--green);
+      border-radius: var(--radius-full);
+      padding: 1px 7px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    #online-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 8px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .online-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 10px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+    }
+    .online-item:hover { background: var(--primary-dim); }
+    .online-item.active { background: var(--primary-dim); border: 1px solid var(--border-hover); }
+
+    .peer-avatar {
+      width: 38px; height: 38px;
+      border-radius: var(--radius-full);
+      background: var(--bg-input);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700;
+      color: var(--accent);
+      border: 1.5px solid var(--accent-dim);
+      flex-shrink: 0;
+      position: relative;
+    }
+    .peer-avatar::after {
+      content: '';
+      position: absolute;
+      bottom: 1px; right: 1px;
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      border: 2px solid var(--bg-panel);
+    }
+    .peer-info .peer-name { font-size: 14px; font-weight: 500; }
+    .peer-info .peer-hint { font-size: 11px; color: var(--text-3); }
+
+    .no-online {
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--text-3);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .no-online .icon { font-size: 36px; margin-bottom: 8px; color: var(--text-3); }
+
+    /* ── CHAT AREA ──────────────────────────────────────────── */
+    #chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+      position: relative;
+    }
+
+    /* Chat area: empty state */
+    #chat-empty {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: var(--text-3);
+      padding: 32px;
+      text-align: center;
+    }
+    #chat-empty .empty-icon {
+      width: 72px; height: 72px;
+      border-radius: var(--radius-lg);
+      background: var(--primary-dim);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; color: var(--primary);
+    }
+    #chat-empty h2 { font-size: 18px; font-weight: 600; color: var(--text-2); }
+    #chat-empty p  { font-size: 13px; line-height: 1.6; max-width: 280px; }
+
+    /* Chat header */
+    #chat-header {
+      display: none;
+      height: var(--header-h);
+      padding: 0 20px;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-panel);
+      flex-shrink: 0;
+    }
+    #chat-header.active { display: flex; }
+    .chat-header-avatar {
+      width: 38px; height: 38px;
+      border-radius: var(--radius-full);
+      background: var(--accent-dim);
+      border: 1.5px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: var(--accent);
+    }
+    .chat-header-info { flex: 1; }
+    .chat-header-info .name { font-size: 15px; font-weight: 600; }
+    .chat-header-info .status {
+      font-size: 11px; color: var(--green);
+      display: flex; align-items: center; gap: 4px;
+    }
+    .chat-header-info .status::before {
+      content: '';
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+    .ephemeral-badge {
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      background: rgba(248,113,113,0.12);
+      border: 1px solid rgba(248,113,113,0.25);
+      color: var(--red);
+      font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+    }
+
+    /* Chat messages */
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 20px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scroll-behavior: smooth;
+    }
+
+    /* Date separator */
+    .date-sep {
+      display: flex; align-items: center; gap: 10px;
+      margin: 8px 0;
+      color: var(--text-3); font-size: 11px;
+    }
+    .date-sep::before, .date-sep::after {
+      content: ''; flex: 1;
+      height: 1px; background: var(--border);
+    }
+
+    /* Message bubble */
+    .msg-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      max-width: 100%;
+      animation: msgIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Outgoing */
+    .msg-row.out { flex-direction: row-reverse; }
+    .msg-row.out .bubble {
+      background: var(--chat-out-bg);
+      color: #fff;
+      border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+      margin-left: auto;
+    }
+    /* Incoming */
+    .msg-row.in .bubble {
+      background: var(--chat-in-bg);
+      color: var(--text-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px;
+    }
+
+    .bubble {
+      padding: 10px 14px;
+      max-width: min(72%, 480px);
+      word-break: break-word;
+      font-size: 14px;
+      line-height: 1.55;
+      position: relative;
+    }
+    .bubble .msg-time {
+      font-size: 10px;
+      opacity: 0.6;
+      margin-top: 3px;
+      display: block;
+      text-align: right;
+    }
+    .msg-row.in .bubble .msg-time { text-align: left; }
+
+    /* Image bubble */
+    .bubble img.chat-img {
+      border-radius: var(--radius-sm);
+      max-width: 240px;
+      max-height: 260px;
+      object-fit: cover;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .bubble img.chat-img:hover { opacity: 0.9; }
+
+    /* Sender name (incoming, multi-user scenario) */
+    .msg-sender-name {
+      font-size: 11px; color: var(--accent); font-weight: 600;
+      margin-bottom: 3px;
+      padding-left: 2px;
+    }
+
+    /* System message */
+    .msg-system {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-3);
+      padding: 4px 0;
+      font-style: italic;
+    }
+
+    /* ── CHAT INPUT ─────────────────────────────────────────── */
+    #chat-input-area {
+      display: none;
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-panel);
+      flex-shrink: 0;
+    }
+    #chat-input-area.active { display: block; }
+
+    .input-shell {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 8px 8px 8px 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .input-shell:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-dim);
+    }
+    #msg-input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text-1);
+      font-size: 14px;
+      line-height: 1.5;
+      resize: none;
+      max-height: 120px;
+      padding: 4px 0;
+    }
+    #msg-input::placeholder { color: var(--text-3); }
+
+    .input-actions { display: flex; align-items: center; gap: 4px; }
+    .btn-icon {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-2);
+      font-size: 20px;
+      transition: color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover { color: var(--text-1); background: var(--border); }
+    .btn-send {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+      transition: opacity 0.15s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+    }
+    .btn-send:hover  { opacity: 0.9; box-shadow: 0 4px 18px rgba(99,102,241,0.6); }
+    .btn-send:active { transform: scale(0.93); }
+    #file-input { display: none; }
+
+    /* Image preview before send */
+    #img-preview {
+      display: none;
+      margin-bottom: 8px;
+      position: relative;
+      width: fit-content;
+    }
+    #img-preview img {
+      max-width: 120px; max-height: 100px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      object-fit: cover;
+    }
+    #img-preview .remove-img {
+      position: absolute; top: -6px; right: -6px;
+      width: 20px; height: 20px;
+      background: var(--red);
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* ── MOBILE SIDEBAR TOGGLE ──────────────────────────────── */
+    #mobile-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 50;
+      backdrop-filter: blur(2px);
+    }
+    #mobile-overlay.active { display: block; }
+
+    .btn-toggle-sidebar {
+      display: none;
+      color: var(--text-2);
+      font-size: 22px;
+      padding: 6px;
+      border-radius: var(--radius-sm);
+      transition: color 0.15s, background 0.15s;
+    }
+    .btn-toggle-sidebar:hover { color: var(--text-1); background: var(--border); }
+
+    /* ── RESPONSIVE ─────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      #sidebar {
+        position: fixed;
+        top: 0; left: 0; bottom: 0;
+        z-index: 60;
+        transform: translateX(-100%);
+        transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+        width: 85vw;
+        min-width: unset;
+      }
+      #sidebar.open {
+        transform: translateX(0);
+        box-shadow: var(--shadow-glow), 8px 0 40px rgba(0,0,0,0.6);
+      }
+      .btn-toggle-sidebar { display: flex; }
+      #chat-header { padding: 0 14px; }
+    }
+
+    /* ── IMAGE LIGHTBOX ─────────────────────────────────────── */
+    #lightbox {
+      display: none;
+      position: fixed; inset: 0; z-index: 900;
+      background: rgba(0,0,0,0.88);
+      align-items: center; justify-content: center;
+      backdrop-filter: blur(6px);
+    }
+    #lightbox.active { display: flex; }
+    #lightbox img {
+      max-width: 92vw; max-height: 90vh;
+      border-radius: var(--radius-md);
+      object-fit: contain;
+    }
+    #lightbox-close {
+      position: absolute; top: 16px; right: 16px;
+      color: #fff; font-size: 28px; cursor: pointer;
+      background: rgba(255,255,255,0.1);
+      border-radius: 50%; width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── TOAST NOTIF ───────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 18px;
+      font-size: 13px; color: var(--text-1);
+      box-shadow: var(--shadow-card);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
+      opacity: 0;
+      z-index: 500;
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     LOADING SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="screen-loading">
+  <div class="spinner"></div>
+  <p style="font-size:13px;color:var(--text-3);">Memuat Lumina Chat…</p>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════════ -->
+<div id="screen-login" style="display:none;">
+  <div class="card">
+    <div class="logo-mark">
+      <div class="logo-icon">
+        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">bubble_chart</span>
+      </div>
+      <div class="logo-text">
+        <h1>Lumina Chat</h1>
+        <p>Private · Ephemeral · Realtime</p>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="input-name">Nama Pengguna</label>
+      <input
+        type="text"
+        id="input-name"
+        placeholder="Masukkan nama kamu…"
+        maxlength="24"
+        autocomplete="off"
+        autofocus
+      />
+    </div>
+
+    <button class="btn-primary" id="btn-login">
+      Masuk ke Lumina
+    </button>
+
+    <p class="login-note">
+      Pesan hanya tersimpan di perangkat kamu.<br />
+      <span>Akan terhapus otomatis jika kedua pihak keluar.</span>
+    </p>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- ── SIDEBAR ──────────────────────────────────────────── -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-user">
+        <div class="user-avatar" id="my-avatar-letter">?</div>
+        <div class="user-info">
+          <div class="user-name" id="my-display-name">—</div>
+          <div class="user-id" id="my-display-id">—</div>
+        </div>
+      </div>
+      <button class="btn-logout" id="btn-logout" title="Logout">
+        <span class="material-symbols-outlined">logout</span>
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="online-badge"></div>
+      Online Sekarang
+      <span class="online-count" id="online-count">0</span>
+    </div>
+
+    <div id="online-list">
+      <div class="no-online">
+        <div class="icon material-symbols-outlined">wifi_tethering_off</div>
+        <p>Belum ada orang lain<br />yang online saat ini.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── CHAT AREA ─────────────────────────────────────────── -->
+  <main id="chat-area">
+    <!-- Empty State -->
+    <div id="chat-empty">
+      <div class="empty-icon">
+        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">lock</span>
+      </div>
+      <h2>Pilih Seseorang untuk Chat</h2>
+      <p>Klik nama teman yang online di sidebar untuk memulai obrolan privat yang aman dan ephemeral.</p>
+    </div>
+
+    <!-- Chat Header (hidden until chat opened) -->
+    <div id="chat-header">
+      <button class="btn-toggle-sidebar btn-icon" id="btn-open-sidebar">
+        <span class="material-symbols-outlined">menu</span>
+      </button>
+      <div class="chat-header-avatar" id="peer-avatar-header">?</div>
+      <div class="chat-header-info">
+        <div class="name" id="peer-name-header">—</div>
+        <div class="status">Online</div>
+      </div>
+      <div class="ephemeral-badge">
+        <span class="material-symbols-outlined" style="font-size:14px;font-variation-settings:'FILL' 1;">timer</span>
+        Ephemeral
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="chat-messages"></div>
+
+    <!-- Input Area (hidden until chat opened) -->
+    <div id="chat-input-area">
+      <!-- Image preview sebelum dikirim -->
+      <div id="img-preview">
+        <img id="img-preview-src" src="" alt="preview" />
+        <div class="remove-img" id="btn-remove-img">
+          <span class="material-symbols-outlined" style="font-size:14px;">close</span>
+        </div>
+      </div>
+
+      <div class="input-shell">
+        <textarea
+          id="msg-input"
+          rows="1"
+          placeholder="Tulis pesan…"
+        ></textarea>
+        <div class="input-actions">
+          <label class="btn-icon" for="file-input" title="Kirim gambar">
+            <span class="material-symbols-outlined">image</span>
+          </label>
+          <input type="file" id="file-input" accept="image/*" />
+          <button class="btn-send" id="btn-send" title="Kirim">
+            <span class="material-symbols-outlined">send</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── MOBILE OVERLAY ──────────────────────────────────────── -->
+<div id="mobile-overlay" id="mobile-overlay"></div>
+
+<!-- ── IMAGE LIGHTBOX ──────────────────────────────────────── -->
+<div id="lightbox">
+  <div id="lightbox-close">
+    <span class="material-symbols-outlined">close</span>
+  </div>
+  <img id="lightbox-img" src="" alt="Gambar penuh" />
+</div>
+
+<!-- ── TOAST ───────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════════════════════════
+     JAVASCRIPT — Core Logic
+════════════════════════════════════════════════════════════ -->
+<script>
+"use strict";
+
+// ╔══════════════════════════════════════════════════════════════
+// ║  KONFIGURASI INSFORGE / SUPABASE
+// ║  Ganti SUPABASE_URL dan SUPABASE_ANON_KEY dengan milik Anda
+// ╚══════════════════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://v7n4wp8p.ap-southeast.insforge.appo';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3OC0xMjM0LTU2NzgtOTBhYi1jZGVmMTIzNDU2NzgiLCJlbWFpbCI6ImFub25AaW5zZm9yZ2UuY29tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTMwMjZ9.m1XDBHuB3IztcpkVGs3b7tP6mDPuBhJ78GzYrE14U88';
+
+// ╔══════════════════════════════════════════════════════════════
+// ║  STATE APLIKASI GLOBAL
+// ╚══════════════════════════════════════════════════════════════
+let supabase        = null;   // InsForge/Supabase client
+let myId            = null;   // ID unik pengguna ini
+let myName          = null;   // Nama pengguna ini
+let activePeerId    = null;   // ID peer yang sedang dibuka
+let activePeerName  = null;
+let activeRoomId    = null;   // Kode jalur privat
+let dashChannel     = null;   // Saluran dashboard (presence global)
+let dmChannel       = null;   // Saluran DM privat
+let pendingImgData  = null;   // Base64 gambar yang sedang diantri
+
+// ── IndexedDB ────────────────────────────────────────────────
+let db = null;
+const DB_NAME       = 'PWAPrivateChatStore';
+const DB_STORE      = 'pesan_privat';
+const DB_VERSION    = 1;
+
+// ════════════════════════════════════════════════════════════════
+// §1  INDEXEDDB — Inisialisasi & CRUD
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Membuka (atau membuat) database IndexedDB.
+ * Mengembalikan Promise<IDBDatabase>.
+ */
+function dbBuka() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+    // Pertama kali / upgrade: buat object store
+    req.onupgradeneeded = (e) => {
+      const database = e.target.result;
+      if (!database.objectStoreNames.contains(DB_STORE)) {
+        // keyPath 'id' auto-increment
+        const store = database.createObjectStore(DB_STORE, {
+          keyPath: 'id',
+          autoIncrement: true
+        });
+        // Index untuk query berdasarkan jalur / room
+        store.createIndex('idxIdJalur', 'idJalur', { unique: false });
+      }
+    };
+
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/**
+ * Menyimpan satu objek pesan ke IndexedDB.
+ * @param {Object} pesan - objek dengan field: idJalur, pengirim, namaPengirim, teks, tipe, waktu
+ * @returns Promise<number> - ID yang digenerate
+ */
+function dbSimpanPesan(pesan) {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(DB_STORE, 'readwrite');
+    const store = tx.objectStore(DB_STORE);
+    const req   = store.add(pesan);
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/**
+ * Mengambil semua pesan untuk satu idJalur tertentu.
+ * @param {string} idJalur - room ID
+ * @returns Promise<Array>
+ */
+function dbAmbilPesanJalur(idJalur) {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(DB_STORE, 'readonly');
+    const store = tx.objectStore(DB_STORE);
+    const idx   = store.index('idxIdJalur');
+    const req   = idx.getAll(IDBKeyRange.only(idJalur));
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+/**
+ * Menghapus SEMUA pesan dari seluruh jalur di IndexedDB (ephemeral clear).
+ * Dipanggil saat kedua pihak sudah offline dan seseorang masuk kembali ke room.
+ * @returns Promise<void>
+ */
+function dbHancurkanSemuaPesan() {
+  return new Promise((resolve, reject) => {
+    const tx    = db.transaction(DB_STORE, 'readwrite');
+    const store = tx.objectStore(DB_STORE);
+    const req   = store.clear();
+    req.onsuccess = () => resolve();
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// §2  PWA — Service Worker Registration
+// ════════════════════════════════════════════════════════════════
+function daftarkanServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => console.log('[PWA] Service Worker terdaftar:', reg.scope))
+      .catch((err) => console.warn('[PWA] SW gagal:', err));
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// §3  UTILITAS
+// ════════════════════════════════════════════════════════════════
+
+/** Generate ID acak user, contoh: user-4f2a */
+function generateUserId() {
+  return 'user-' + Math.random().toString(36).slice(2, 8);
+}
+
+/** Format waktu sekarang: "14:32" */
+function formatWaktu() {
+  return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * Buat kode jalur privat simetris dari dua ID.
+ * Diurutkan alfabet agar A↔B == B↔A.
+ */
+function buatIdJalur(idA, idB) {
+  return [idA, idB].sort().join('-vs-');
+}
+
+/** Huruf pertama dari nama untuk avatar */
+function inisial(nama) {
+  return (nama || '?').charAt(0).toUpperCase();
+}
+
+/** Tampilkan toast singkat */
+let toastTimer = null;
+function tampilToast(pesan) {
+  const el = document.getElementById('toast');
+  el.textContent = pesan;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+/** Scroll chat ke bawah */
+function scrollBawah() {
+  const el = document.getElementById('chat-messages');
+  el.scrollTop = el.scrollHeight;
+}
+
+// ════════════════════════════════════════════════════════════════
+// §4  UI RENDER — Login & App Toggle
+// ════════════════════════════════════════════════════════════════
+function tampilHalamanLogin() {
+  document.getElementById('screen-loading').style.display = 'none';
+  document.getElementById('screen-login').style.display   = 'flex';
+  document.getElementById('app').classList.remove('active');
+}
+
+function tampilApp() {
+  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('app').classList.add('active');
+  // Isi info user di sidebar
+  document.getElementById('my-display-name').textContent = myName;
+  document.getElementById('my-display-id').textContent   = myId;
+  document.getElementById('my-avatar-letter').textContent = inisial(myName);
+}
+
+// ════════════════════════════════════════════════════════════════
+// §5  UI RENDER — Daftar Online
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Render ulang sidebar daftar pengguna online berdasarkan
+ * data presence terkini dari InsForge.
+ * @param {Object} presenceState - state dari supabase presence
+ */
+function renderDaftarOnline(presenceState) {
+  const list  = document.getElementById('online-list');
+  const count = document.getElementById('online-count');
+
+  // Kumpulkan semua user selain diri sendiri
+  const peers = [];
+  for (const key in presenceState) {
+    const entry = presenceState[key];
+    // Setiap key bisa punya beberapa presences (multi-tab)
+    const arr = Array.isArray(entry) ? entry : [entry];
+    arr.forEach((p) => {
+      if (p.userId && p.userId !== myId) {
+        peers.push({ id: p.userId, nama: p.userName || 'Anonim' });
+      }
+    });
+  }
+
+  count.textContent = peers.length;
+
+  if (peers.length === 0) {
+    list.innerHTML = `
+      <div class="no-online">
+        <div class="icon material-symbols-outlined">wifi_tethering_off</div>
+        <p>Belum ada orang lain<br/>yang online saat ini.</p>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = peers.map((p) => `
+    <div class="online-item ${activePeerId === p.id ? 'active' : ''}"
+         data-peer-id="${p.id}"
+         data-peer-name="${p.nama}">
+      <div class="peer-avatar">${inisial(p.nama)}</div>
+      <div class="peer-info">
+        <div class="peer-name">${p.nama}</div>
+        <div class="peer-hint">Klik untuk chat privat</div>
+      </div>
+    </div>
+  `).join('');
+
+  // Pasang event klik
+  list.querySelectorAll('.online-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      bukaChat(el.dataset.peerId, el.dataset.peerName);
+      // Tutup sidebar di mobile
+      if (window.innerWidth <= 640) tutupSidebar();
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// §6  UI RENDER — Area Chat
+// ════════════════════════════════════════════════════════════════
+function tampilkanPesanDiUI(pesan) {
+  const box = document.getElementById('chat-messages');
+  const arahKeluar = pesan.pengirim === myId;
+  const row = document.createElement('div');
+  row.className = `msg-row ${arahKeluar ? 'out' : 'in'}`;
+
+  let konten = '';
+  if (pesan.tipe === 'gambar') {
+    // Gambar dari base64
+    konten = `
+      <img class="chat-img" src="${pesan.teks}" alt="Gambar" loading="lazy"
+           onclick="bukaLightbox('${pesan.teks}')" />
+      <span class="msg-time">${pesan.waktu}</span>`;
+  } else {
+    konten = `${pesan.teks}<span class="msg-time">${pesan.waktu}</span>`;
+  }
+
+  row.innerHTML = `
+    <div class="bubble">
+      ${!arahKeluar ? `<div class="msg-sender-name">${pesan.namaPengirim}</div>` : ''}
+      ${konten}
+    </div>`;
+
+  box.appendChild(row);
+  scrollBawah();
+}
+
+function tampilkanPesanSistem(teks) {
+  const box = document.getElementById('chat-messages');
+  const el = document.createElement('div');
+  el.className = 'msg-system';
+  el.textContent = teks;
+  box.appendChild(el);
+  scrollBawah();
+}
+
+// ════════════════════════════════════════════════════════════════
+// §7  INSFORGE PRESENCE — Saluran Dashboard Global
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Bergabung ke saluran presence global 'dashboard-pusat'.
+ * Menyiarkan status online dan mendengarkan perubahan kehadiran.
+ */
+function bergabungDashboard() {
+  dashChannel = supabase.channel('dashboard-pusat', {
+    config: { presence: { key: myId } }
+  });
+
+  // ── Ketika ada perubahan presence (sync, join, leave) ────
+  dashChannel
+    .on('presence', { event: 'sync' }, () => {
+      // Dapatkan state presence terkini dan render ulang
+      const state = dashChannel.presenceState();
+      renderDaftarOnline(state);
+    })
+    .on('presence', { event: 'join' }, ({ newPresences }) => {
+      // Tidak perlu render manual; 'sync' sudah menangani
+      const state = dashChannel.presenceState();
+      renderDaftarOnline(state);
+    })
+    .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+      const state = dashChannel.presenceState();
+      renderDaftarOnline(state);
+    });
+
+  // ── Subscribe & track kehadiran diri sendiri ────────────
+  dashChannel.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await dashChannel.track({
+        userId:   myId,
+        userName: myName,
+        gabungPada: new Date().toISOString()
+      });
+      console.log('[Presence] Berhasil track di dashboard-pusat');
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// §8  INSFORGE BROADCAST — Saluran DM Privat
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Berlangganan ke saluran privat dengan peer tertentu.
+ * Menggunakan Realtime Broadcast event 'dm' untuk pesan instan.
+ * Juga menggunakan Presence pada saluran ini untuk logika ephemeral.
+ *
+ * @param {string} roomId  - kode jalur gabungan (sorted)
+ * @param {string} peerId  - ID lawan bicara
+ */
+function berlanggananDM(roomId, peerId) {
+  // Lepas saluran DM lama jika ada
+  if (dmChannel) {
+    supabase.removeChannel(dmChannel);
+    dmChannel = null;
+  }
+
+  dmChannel = supabase.channel(roomId, {
+    config: {
+      broadcast: { self: false },     // Tidak terima broadcast milik sendiri
+      presence:  { key: myId }
+    }
+  });
+
+  // ── Terima pesan DM dari peer ────────────────────────────
+  dmChannel.on('broadcast', { event: 'dm' }, async ({ payload }) => {
+    // Render pesan masuk di UI
+    tampilkanPesanDiUI(payload);
+    // Simpan ke IndexedDB lokal
+    try {
+      await dbSimpanPesan({
+        idJalur:      roomId,
+        pengirim:     payload.pengirim,
+        namaPengirim: payload.namaPengirim,
+        teks:         payload.teks,
+        tipe:         payload.tipe,
+        waktu:        payload.waktu
+      });
+    } catch (err) {
+      console.warn('[IndexedDB] Gagal simpan pesan masuk:', err);
+    }
+  });
+
+  // ── Presence di saluran privat: deteksi siapa ada di sini ──
+  dmChannel
+    .on('presence', { event: 'sync' }, () => {
+      /* sync: tidak perlu tindakan khusus */
+    })
+    .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+      // Ada yang meninggalkan room privat ini
+      const stateSekarang = dmChannel.presenceState();
+      const jumlahOrang   = Object.keys(stateSekarang).length;
+
+      console.log(`[Ephemeral] Leave event. Sisa di room: ${jumlahOrang}`);
+
+      // ── Aturan: pasang flag jika room kosong melompong ──
+      if (jumlahOrang === 0) {
+        localStorage.setItem('harus_clear_' + roomId, 'true');
+        console.log(`[Ephemeral] Room "${roomId}" kosong → flag harus_clear dipasang`);
+        tampilkanPesanSistem('Semua pihak telah keluar. Pesan akan terhapus saat dibuka kembali.');
+      }
+    });
+
+  // ── Subscribe & join presence room privat ───────────────
+  dmChannel.subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await dmChannel.track({
+        userId:   myId,
+        userName: myName
+      });
+
+      // ── Cek pada entry: apakah ini orang pertama & ada flag? ──
+      await cekDanHancurkanJikaPerlu(roomId);
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// §9  LOGIKA EPHEMERAL — Pengecekan & Penghancuran Data
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Dipanggil saat masuk ke saluran DM.
+ * Jika saya orang pertama di room DAN ada flag 'harus_clear_...',
+ * hancurkan semua data pesan dari IndexedDB dan bersihkan layar.
+ *
+ * @param {string} roomId - kode jalur
+ */
+async function cekDanHancurkanJikaPerlu(roomId) {
+  // Tunggu sebentar agar presence state tersinkron
+  await new Promise((r) => setTimeout(r, 800));
+
+  const stateSekarang = dmChannel.presenceState();
+  const jumlahOrang   = Object.keys(stateSekarang).length;
+  const flagHancur    = localStorage.getItem('harus_clear_' + roomId);
+
+  console.log(`[Ephemeral] Entry check — orang di room: ${jumlahOrang}, flag: ${flagHancur}`);
+
+  if (jumlahOrang === 1 && flagHancur === 'true') {
+    console.log('[Ephemeral] Kondisi hancur terpenuhi → membersihkan data!');
+
+    // Hapus flag
+    localStorage.removeItem('harus_clear_' + roomId);
+
+    // Hancurkan semua pesan di IndexedDB
+    try {
+      await dbHancurkanSemuaPesan();
+      console.log('[IndexedDB] Seluruh pesan berhasil dihapus (ephemeral).');
+    } catch (err) {
+      console.warn('[IndexedDB] Gagal menghapus pesan:', err);
+    }
+
+    // Bersihkan tampilan layar chat
+    document.getElementById('chat-messages').innerHTML = '';
+    tampilkanPesanSistem('✦ Ruang ini telah dibersihkan — kedua pihak pernah offline.');
+    tampilToast('Pesan ephemeral telah dihapus otomatis.');
+
+  } else if (jumlahOrang === 1) {
+    // Orang pertama masuk, tidak ada flag → muat riwayat dari IndexedDB
+    await muatRiwayatDariDB(roomId);
+  } else {
+    // Ada orang lain juga di room → muat riwayat
+    await muatRiwayatDariDB(roomId);
+  }
+}
+
+/**
+ * Muat riwayat pesan dari IndexedDB untuk ditampilkan ulang.
+ * @param {string} roomId
+ */
+async function muatRiwayatDariDB(roomId) {
+  try {
+    const pesanLama = await dbAmbilPesanJalur(roomId);
+    if (pesanLama.length === 0) return;
+
+    // Render semua pesan lama secara berurutan
+    pesanLama.forEach((p) => tampilkanPesanDiUI(p));
+    console.log(`[IndexedDB] ${pesanLama.length} pesan dimuat dari DB untuk room "${roomId}"`);
+  } catch (err) {
+    console.warn('[IndexedDB] Gagal muat riwayat:', err);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// §10  MEMBUKA CHAT PRIVAT
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Membuka jendela chat privat dengan peer tertentu.
+ * @param {string} peerId   - ID lawan bicara
+ * @param {string} peerName - Nama lawan bicara
+ */
+async function bukaChat(peerId, peerName) {
+  if (activePeerId === peerId) return; // Sudah dibuka
+
+  activePeerId   = peerId;
+  activePeerName = peerName;
+  activeRoomId   = buatIdJalur(myId, peerId);
+
+  // ── Update UI header ────────────────────────────────────
+  document.getElementById('chat-empty').style.display   = 'none';
+  document.getElementById('chat-header').classList.add('active');
+  document.getElementById('chat-input-area').classList.add('active');
+  document.getElementById('peer-name-header').textContent = peerName;
+  document.getElementById('peer-avatar-header').textContent = inisial(peerName);
+  document.getElementById('chat-messages').innerHTML = '';
+
+  // Tandai aktif di sidebar
+  document.querySelectorAll('.online-item').forEach((el) => {
+    el.classList.toggle('active', el.dataset.peerId === peerId);
+  });
+
+  // ── Berlangganan ke saluran DM InsForge ─────────────────
+  berlanggananDM(activeRoomId, peerId);
+}
+
+// ════════════════════════════════════════════════════════════════
+// §11  KIRIM PESAN
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Kirim pesan teks atau gambar melalui Broadcast InsForge.
+ * Setelah berhasil disiarkan, simpan juga ke IndexedDB lokal.
+ */
+async function kirimPesan() {
+  if (!activeRoomId || !dmChannel) {
+    tampilToast('Buka percakapan terlebih dahulu.');
+    return;
+  }
+
+  const inputEl = document.getElementById('msg-input');
+  const teks    = inputEl.value.trim();
+  const adaGambar = !!pendingImgData;
+
+  if (!teks && !adaGambar) return;
+
+  // ── Bangun objek pesan ─────────────────────────────────
+  const pesan = {
+    idJalur:      activeRoomId,
+    pengirim:     myId,
+    namaPengirim: myName,
+    teks:         adaGambar ? pendingImgData : teks,
+    tipe:         adaGambar ? 'gambar' : 'teks',
+    waktu:        formatWaktu()
+  };
+
+  // ── Tampil di UI milik pengirim ────────────────────────
+  tampilkanPesanDiUI(pesan);
+
+  // ── Simpan ke IndexedDB ────────────────────────────────
+  try {
+    await dbSimpanPesan(pesan);
+  } catch (err) {
+    console.warn('[IndexedDB] Gagal simpan pesan keluar:', err);
+  }
+
+  // ── Siarkan via Broadcast InsForge ────────────────────
+  await dmChannel.send({
+    type:    'broadcast',
+    event:   'dm',
+    payload: pesan
+  });
+
+  // Reset input
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  if (adaGambar) {
+    pendingImgData = null;
+    document.getElementById('img-preview').style.display = 'none';
+    document.getElementById('img-preview-src').src = '';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// §12  KIRIM GAMBAR — FileReader ke Base64
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Mengubah file gambar yang dipilih menjadi Base64 menggunakan FileReader.
+ * Data base64 disimpan di pendingImgData untuk dikirim bersama kirimPesan().
+ */
+function prosesGambar(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    tampilToast('Pilih file gambar yang valid.');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    pendingImgData = e.target.result; // base64 data URL
+
+    // Tampilkan preview
+    const previewEl    = document.getElementById('img-preview');
+    const previewImgEl = document.getElementById('img-preview-src');
+    previewImgEl.src   = pendingImgData;
+    previewEl.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ════════════════════════════════════════════════════════════════
+// §13  LIGHTBOX
+// ════════════════════════════════════════════════════════════════
+function bukaLightbox(src) {
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('active');
+}
+
+// ════════════════════════════════════════════════════════════════
+// §14  LOGOUT
+// ════════════════════════════════════════════════════════════════
+async function logout() {
+  // Hentikan track & lepas semua channel
+  try {
+    if (dashChannel) {
+      await dashChannel.untrack();
+      await supabase.removeChannel(dashChannel);
+    }
+    if (dmChannel) {
+      await dmChannel.untrack();
+      await supabase.removeChannel(dmChannel);
+    }
+  } catch (e) { /* abaikan error saat cleanup */ }
+
+  // Reset state
+  myId = myName = activePeerId = activePeerName = activeRoomId = null;
+  dashChannel = dmChannel = null;
+
+  // Sembunyikan app, tampil login
+  document.getElementById('app').classList.remove('active');
+  tampilHalamanLogin();
+}
+
+// ════════════════════════════════════════════════════════════════
+// §15  MOBILE SIDEBAR TOGGLE
+// ════════════════════════════════════════════════════════════════
+function bukaSebarMobile() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('mobile-overlay').classList.add('active');
+}
+function tutupSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('mobile-overlay').classList.remove('active');
+}
+
+// ════════════════════════════════════════════════════════════════
+// §16  EVENT LISTENERS
+// ════════════════════════════════════════════════════════════════
+function pasangEventListeners() {
+  // Login
+  document.getElementById('btn-login').addEventListener('click', handleLogin);
+  document.getElementById('input-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleLogin();
+  });
+
+  // Kirim pesan
+  document.getElementById('btn-send').addEventListener('click', kirimPesan);
+  document.getElementById('msg-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      kirimPesan();
+    }
+  });
+
+  // Auto-expand textarea
+  document.getElementById('msg-input').addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  // Upload gambar
+  document.getElementById('file-input').addEventListener('change', (e) => {
+    if (e.target.files[0]) prosesGambar(e.target.files[0]);
+    e.target.value = ''; // reset agar bisa pilih file sama lagi
+  });
+
+  // Hapus preview gambar
+  document.getElementById('btn-remove-img').addEventListener('click', () => {
+    pendingImgData = null;
+    document.getElementById('img-preview').style.display = 'none';
+    document.getElementById('img-preview-src').src = '';
+  });
+
+  // Logout
+  document.getElementById('btn-logout').addEventListener('click', logout);
+
+  // Mobile sidebar
+  document.getElementById('btn-open-sidebar')
+    ?.addEventListener('click', bukaSebarMobile);
+  document.getElementById('mobile-overlay')
+    .addEventListener('click', tutupSidebar);
+
+  // Lightbox close
+  document.getElementById('lightbox-close').addEventListener('click', () => {
+    document.getElementById('lightbox').classList.remove('active');
+  });
+  document.getElementById('lightbox').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) {
+      document.getElementById('lightbox').classList.remove('active');
+    }
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// §17  LOGIN HANDLER
+// ════════════════════════════════════════════════════════════════
+async function handleLogin() {
+  const nameEl = document.getElementById('input-name');
+  const nama   = nameEl.value.trim();
+  if (!nama) {
+    nameEl.focus();
+    tampilToast('Masukkan nama pengguna kamu!');
+    return;
+  }
+
+  myName = nama;
+  myId   = generateUserId();
+
+  // Sembunyikan login, tampil app
+  tampilApp();
+
+  // Bergabung ke dashboard presence InsForge
+  bergabungDashboard();
+}
+
+// ════════════════════════════════════════════════════════════════
+// §18  INISIALISASI UTAMA
+// ════════════════════════════════════════════════════════════════
+async function init() {
+  // Daftar Service Worker
+  daftarkanServiceWorker();
+
+  // Buka IndexedDB
+  try {
+    db = await dbBuka();
+    console.log('[IndexedDB] Database "PWAPrivateChatStore" siap.');
+  } catch (err) {
+    console.error('[IndexedDB] Gagal buka database:', err);
+  }
+
+  // Inisialisasi client InsForge (Supabase)
+  try {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log('[InsForge] Supabase client diinisialisasi.');
+  } catch (err) {
+    console.error('[InsForge] Gagal init Supabase client:', err);
+  }
+
+  // Pasang semua event listener
+  pasangEventListeners();
+
+  // Tampilkan halaman login
+  tampilHalamanLogin();
+}
+
+// ── Jalankan saat DOM siap ───────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
